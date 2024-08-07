@@ -1,0 +1,46 @@
+Importing the Contract
+const SimpleBank = artifacts.require("SimpleBank");
+This line imports the compiled SimpleBank contract so we can interact with it in the tests.
+
+Defining the Test Suite
+contract("SimpleBank", accounts => {
+This function defines the test suite for the SimpleBank contract. The accounts parameter is an array of addresses provided by the Ethereum client (like Ganache).
+
+Before Hook
+before(async () => {
+  bank = await SimpleBank.deployed();
+});
+The before hook runs before any test cases in the suite. It deploys the SimpleBank contract and stores the instance in the bank variable.
+
+Test Case: Deposit Funds
+it("should deposit funds", async () => {
+  const depositAmount = web3.utils.toWei("1", "ether");
+  await bank.deposit({ from: accounts[0], value: depositAmount });
+
+  const balance = await bank.getBalance({ from: accounts[0] });
+  assert.equal(balance.toString(), depositAmount, "Deposit amount is incorrect");
+});
+This test case deposits 1 ether into the bank contract from accounts[0] and checks if the balance is updated correctly.
+
+it("should withdraw funds", async () => {
+  const withdrawAmount = web3.utils.toWei("0.5", "ether");
+  await bank.withdraw(withdrawAmount, { from: accounts[0] });
+
+  const balance = await bank.getBalance({ from: accounts[0] });
+  assert.equal(balance.toString(), web3.utils.toWei("0.5", "ether"), "Withdraw amount is incorrect");
+});
+This test case withdraws 0.5 ether from the bank contract and verifies the balance of accounts[0] is updated correctly.
+
+Test Case: Prevent Withdrawal More Than Balance
+it("should not allow withdrawal more than balance", async () => {
+  const withdrawAmount = web3.utils.toWei("1", "ether");
+  try {
+    await bank.withdraw(withdrawAmount, { from: accounts[0] });
+    assert.fail("Withdrawal should have failed due to insufficient balance");
+  } catch (error) {
+    assert.include(error.message, "Insufficient balance", "Incorrect error message");
+  }
+});
+To run the tests, use the following command:
+
+truffle test
