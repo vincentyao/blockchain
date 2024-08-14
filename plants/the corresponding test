@@ -1,0 +1,113 @@
+const PlantsVsZombies = artifacts.require("PlantsVsZombies");
+const { expectEvent, expectRevert } = require('@openzeppelin/test-helpers');
+
+contract("PlantsVsZombies", (accounts) => {
+  let pvz;
+
+  beforeEach(async () => {
+    pvz = await PlantsVsZombies.new();
+  });
+
+  describe("Game Initialization", () => {
+    it("should initialize with correct starting values", async () => {
+      const playerInfo = await pvz.getPlayerInfo();
+      assert.equal(playerInfo.sunTokens, 50, "Initial sun tokens should be 50");
+      assert.equal(playerInfo.score, 0, "Initial score should be 0");
+      assert.equal(playerInfo.isGameOver, false, "Game should not be over initially");
+    });
+  });
+
+  describe("Plant Placement", () => {
+    it("should place a sunflower correctly", async () => {
+      const result = await pvz.placePlant(0, 0); // position 0, plant type 0 (sunflower)
+      expectEvent(result, 'PlantPlaced', { position: '0', plantType: '0' });
+
+      const plant = await pvz.getPlant(0);
+      assert.equal(plant.health, 100, "Sunflower health should be 100");
+      assert.equal(plant.attack, 0, "Sunflower attack should be 0");
+
+      const playerInfo = await pvz.getPlayerInfo();
+      assert.equal(playerInfo.sunTokens, 0, "Sun tokens should be deducted");
+    });
+
+    it("should place a peashooter correctly", async () => {
+      // First, place a sunflower to get more sun tokens
+      await pvz.placePlant(0, 0);
+      await pvz.processRound(); // Generate sun tokens
+
+      const result = await pvz.placePlant(1, 1); // position 1, plant type 1 (peashooter)
+      expectEvent(result, 'PlantPlaced', { position: '1', plantType: '1' });
+
+      const plant = await pvz.getPlant(1);
+      assert.equal(plant.health, 100, "Peashooter health should be 100");
+      assert.equal(plant.attack, 20, "Peashooter attack should be 20");
+    });
+
+    it("should not place a plant in an occupied position", async () => {
+      await pvz.placePlant(0, 0);
+      await expectRevert(
+        pvz.placePlant(0, 0),
+        "Position occupied"
+      );
+    });
+
+    it("should not place a plant with insufficient sun tokens", async () => {
+      await expectRevert(
+        pvz.placePlant(0, 1), // Trying to place a peashooter (costs 100) with only 50 sun tokens
+        "Insufficient sun tokens"
+      );
+    });
+  });
+
+  describe("Zombie Spawning", () => {
+    it("should spawn a zombie correctly", async () => {
+      const result = await pvz.spawnZombie(0);
+      expectEvent(result, 'ZombieSpawned', { position: '0' });
+
+      const zombie = await pvz.getZombie(0);
+      assert.equal(zombie.health, 100, "Zombie health should be 100");
+      assert.equal(zombie.attack, 10, "Zombie attack should be 10");
+    });
+
+    it("should not spawn a zombie in an occupied position", async () => {
+      await pvz.spawnZombie(0);
+      await expectRevert(
+        pvz.spawnZombie(0),
+        "Position occupied"
+      );
+    });
+  });
+
+  describe("Game Mechanics", () => {
+    it("should process a round correctly", async () => {
+      await pvz.placePlant(0, 1); // Place a peashooter
+      await pvz.spawnZombie(0);
+
+      const result = await pvz.processRound();
+      expectEvent(result, 'ZombieAttacked', { position: '0', damage: '20' });
+      expectEvent(result, 'PlantAttacked', { position: '0', damage: '10' });
+
+      const plant = await pvz.getPlant(0);
+      const zombie = await pvz.getZombie(0);
+      assert.equal(plant.health, 90, "Plant health should be reduced");
+      assert.equal(zombie.health, 80, "Zombie health should be reduced");
+    });
+
+    it("should end the game when a zombie reaches an empty position", async () => {
+      await pvz.spawnZombie(0);
+      const result = await pvz.processRound();
+      expectEvent(result, 'GameOver');
+
+      const playerInfo = await pvz.getPlayerInfo();
+      assert.equal(playerInfo.isGameOver, true, "Game should be over");
+    });
+
+    it("should generate sun tokens from sunflowers", async () => {
+      await pvz.placePlant(0, 0); // Place a sunflower
+      await pvz.processRound();
+
+      const playerInfo = await pvz.getPlayerInfo();
+      assert.equal(playerInfo.sunTokens, 25, "Should generate 25 sun tokens");
+    });
+  });
+});
