@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract PlantsVsZombies {
+    struct Plant {
+        uint256 health;
+        uint256 attack;
+        uint256 cost;
+    }
+
+    struct Zombie {
+        uint256 health;
+        uint256 attack;
+    }
+
+    struct GameState {
+        mapping(uint256 => Plant) plants;
+        mapping(uint256 => Zombie) zombies;
+        uint256 playerSunTokens;
+        uint256 playerScore;
+        bool gameOver;
+    }
+
+    GameState public gameState;
+    uint256 public constant GRID_SIZE = 5;
+    uint256 public constant INITIAL_SUN_TOKENS = 50;
+
+    event PlantPlaced(uint256 position, uint256 plantType);
+    event ZombieSpawned(uint256 position);
+    event PlantAttacked(uint256 position, uint256 damage);
+    event ZombieAttacked(uint256 position, uint256 damage);
+    event GameOver(uint256 finalScore);
+
+    constructor() {
+        gameState.playerSunTokens = INITIAL_SUN_TOKENS;
+        gameState.playerScore = 0;
+        gameState.gameOver = false;
+    }
+
+    function placePlant(uint256 position, uint256 plantType) external {
+        require(!gameState.gameOver, "Game is over");
+        require(position < GRID_SIZE, "Invalid position");
+        require(gameState.plants[position].health == 0, "Position occupied");
+
+        Plant memory newPlant;
+        if (plantType == 0) { // Sunflower
+            newPlant = Plant(100, 0, 50);
+        } else if (plantType == 1) { // Peashooter
+            newPlant = Plant(100, 20, 100);
+        } else {
+            revert("Invalid plant type");
+        }
+
+        require(gameState.playerSunTokens >= newPlant.cost, "Insufficient sun tokens");
+
+        gameState.playerSunTokens -= newPlant.cost;
+        gameState.plants[position] = newPlant;
+
+        emit PlantPlaced(position, plantType);
+    }
+
+    function spawnZombie(uint256 position) external {
+        require(!gameState.gameOver, "Game is over");
+        require(position < GRID_SIZE, "Invalid position");
+        require(gameState.zombies[position].health == 0, "Position occupied");
+
+        gameState.zombies[position] = Zombie(100, 10);
+
+        emit ZombieSpawned(position);
+    }
+
+    function processRound() external {
+        require(!gameState.gameOver, "Game is over");
+
+        // Plants attack zombies
+        for (uint256 i = 0; i < GRID_SIZE; i++) {
+            if (gameState.plants[i].health > 0 && gameState.plants[i].attack > 0) {
+                if (gameState.zombies[i].health > 0) {
+                    uint256 damage = gameState.plants[i].attack;
+                    if (damage >= gameState.zombies[i].health) {
+                        gameState.zombies[i].health = 0;
+                        gameState.playerScore += 10;
+                    } else {
+                        gameState.zombies[i].health -= damage;
+                    }
+                    emit ZombieAttacked(i, damage);
+                }
+            }
+        }
+
+        // Zombies attack plants
+        for (uint256 i = 0; i < GRID_SIZE; i++) {
+            if (gameState.zombies[i].health > 0) {
+                if (gameState.plants[i].health > 0) {
+                    uint256 damage = gameState.zombies[i].attack;
+                    if (damage >= gameState.plants[i].health) {
+                        gameState.plants[i].health = 0;
+                    } else {
+                        gameState.plants[i].health -= damage;
+                    }
+                    emit PlantAttacked(i, damage);
+                } else {
+                    gameState.gameOver = true;
+                    emit GameOver(gameState.playerScore);
+                    return;
+                }
+            }
+        }
+
+        // Generate sun tokens from sunflowers
+        for (uint256 i = 0; i < GRID_SIZE; i++) {
+            if (gameState.plants[i].health > 0 && gameState.plants[i].attack == 0) { // Sunflower
+                gameState.playerSunTokens += 25;
+            }
+        }
+    }
+
+    function getPlant(uint256 position) external view returns (uint256 health, uint256 attack) {
+        Plant memory plant = gameState.plants[position];
+        return (plant.health, plant.attack);
+    }
+
+    function getZombie(uint256 position) external view returns (uint256 health, uint256 attack) {
+        Zombie memory zombie = gameState.zombies[position];
+        return (zombie.health, zombie.attack);
+    }
+
+    function getPlayerInfo() external view returns (uint256 sunTokens, uint256 score, bool isGameOver) {
+        return (gameState.playerSunTokens, gameState.playerScore, gameState.gameOver);
+    }
+}
