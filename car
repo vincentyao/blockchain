@@ -1,1 +1,16 @@
+v// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
+contract insurance {
+    struct car {
+        uint256 _speedHour;
+        string _carName;
+        string _environMent;
+    }
+
+    car[] public listofcar;
+
+    function addCar(uint256 speedHour, string memory carName, string memory environMent) public {
+        listofcar.push(car(speedHour,carName,environMent));
+    }
+}    
